@@ -45,3 +45,105 @@ func (db *Database) Get(key string) ([]byte, error) {
 		return nil, errors.New("invalid opertaion on String store")
 	}
 }
+
+func (db *Database) LPush(key string, value []byte) error {
+	s, ok := db.store[key]
+	if !ok {
+		l := newList()
+		l.insertHead(value)
+		db.store[key] = l
+		return nil
+	}
+
+	if l, ok := s.(*list); ok {
+		l.insertHead(value)
+		return nil
+	} else {
+		return errors.New("wrong operation against key")
+	}
+}
+
+func (db *Database) RPush(key string, value []byte) error {
+	s, ok := db.store[key]
+	if !ok {
+		l := newList()
+		l.insertTail(value)
+		db.store[key] = l
+		return nil
+	}
+
+	if l, ok := s.(*list); ok {
+		l.insertTail(value)
+		return nil
+	} else {
+		return errors.New("wrong operation against key")
+	}
+}
+
+func (db *Database) LPop(key string) ([]byte, error) {
+	s, ok := db.store[key]
+	if !ok {
+		return nil, errors.New("key does not exist")
+	}
+
+	if l, ok := s.(*list); ok {
+		b := l.popHead()
+		return b, nil
+	} else {
+		return nil, errors.New("wrong operation against key")
+	}
+}
+
+func (db *Database) RPop(key string) ([]byte, error) {
+	s, ok := db.store[key]
+	if !ok {
+		return nil, errors.New("key does not exist")
+	}
+
+	if l, ok := s.(*list); ok {
+		b := l.popHead()
+		return b, nil
+	} else {
+		return nil, errors.New("wrong operation against key")
+	}
+}
+
+func (db *Database) LRange(key string, start, end int64) ([][]byte, error) {
+	s, ok := db.store[key]
+	if !ok {
+		return nil, errors.New("key does not exist")
+	}
+
+	if l, ok := s.(*list); ok {
+		return l.get(start, end), nil
+	} else {
+		return nil, errors.New("wrong operation against key")
+	}
+}
+
+func (db *Database) LTrim(key string, start, end int64) error {
+	s, ok := db.store[key]
+	if !ok {
+		return errors.New("key does not exist")
+	}
+
+	if l, ok := s.(*list); ok {
+		l.trim(start, end)
+		return nil
+	} else {
+		return errors.New("wrong operation against key")
+	}
+}
+
+func (db *Database) LLen(key string) (uint32, error) {
+	s, ok := db.store[key]
+	if !ok {
+		return 0, errors.New("key does not exist")
+	}
+
+	if l, ok := s.(*list); ok {
+		return l.length, nil
+	} else {
+		return 0, errors.New("wrong operation against key")
+	}
+}
