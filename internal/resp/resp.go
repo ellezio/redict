@@ -154,31 +154,31 @@ type DataType interface {
 	Encode(*bytes.Buffer)
 }
 
-func NewSimpleString(v []byte) *SimpleString {
-	return &SimpleString{v}
+func NewSimpleString(v string) *SimpleString {
+	return &SimpleString{[]byte(v)}
 }
 
 type SimpleString struct {
-	value []byte
+	Value []byte
 }
 
 func (ss *SimpleString) Encode(b *bytes.Buffer) {
 	b.WriteByte(simpleString)
-	b.Write(ss.value)
+	b.Write(ss.Value)
 	b.WriteString(termination)
 }
 
-func NewSimpleError(v []byte) *SimpleError {
-	return &SimpleError{v}
+func NewSimpleError(v string) *SimpleError {
+	return &SimpleError{[]byte(v)}
 }
 
 type SimpleError struct {
-	value []byte
+	Value []byte
 }
 
 func (se *SimpleError) Encode(b *bytes.Buffer) {
 	b.WriteByte(simpleError)
-	b.Write(se.value)
+	b.Write(se.Value)
 	b.WriteString(termination)
 }
 
@@ -187,29 +187,29 @@ func NewInteger(v int64) *Integer {
 }
 
 type Integer struct {
-	value int64
+	Value int64
 }
 
 func (i *Integer) Encode(b *bytes.Buffer) {
 	b.WriteByte(integer)
-	b.WriteString(strconv.FormatInt(i.value, 10))
+	b.WriteString(strconv.FormatInt(i.Value, 10))
 	b.WriteString(termination)
 }
 
-func NewBulkString(v []byte) *BulkString {
-	return &BulkString{v}
+func NewBulkString(v string) *BulkString {
+	return &BulkString{[]byte(v)}
 }
 
 type BulkString struct {
-	value []byte
+	Value []byte
 }
 
 func (bs *BulkString) Encode(b *bytes.Buffer) {
 	b.WriteByte(bulkString)
-	b.WriteString(strconv.FormatUint(uint64(len(bs.value)), 10))
+	b.WriteString(strconv.FormatUint(uint64(len(bs.Value)), 10))
 	b.WriteString(termination)
-	if len(bs.value) > 0 {
-		b.Write(bs.value)
+	if len(bs.Value) > 0 {
+		b.Write(bs.Value)
 		b.WriteString(termination)
 	}
 }
@@ -220,19 +220,19 @@ func NewArray() *Array {
 }
 
 type Array struct {
-	values []DataType
+	Values []DataType
 }
 
 func (a *Array) Encode(b *bytes.Buffer) {
 	b.WriteByte(array)
-	b.WriteString(strconv.FormatUint(uint64(len(a.values)), 10))
+	b.WriteString(strconv.FormatUint(uint64(len(a.Values)), 10))
 	b.WriteString(termination)
 
-	for _, v := range a.values {
+	for _, v := range a.Values {
 		v.Encode(b)
 	}
 }
 
 func (a *Array) Add(dataType DataType) {
-	a.values = append(a.values, dataType)
+	a.Values = append(a.Values, dataType)
 }
