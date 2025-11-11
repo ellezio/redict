@@ -10,43 +10,52 @@ import (
 
 func main() {
 	b := &bytes.Buffer{}
-	resp.SimpleString("OK").Marshal(b)
+	resp.NewSimpleString([]byte("OK")).Encode(b)
 	fmt.Println(strings.ReplaceAll(b.String(), "\r\n", `\r\n`))
 
 	b.Reset()
-	resp.SimpleError("Error message").Marshal(b)
+	resp.NewSimpleError([]byte("Error message")).Encode(b)
 	fmt.Println(strings.ReplaceAll(b.String(), "\r\n", `\r\n`))
 
 	b.Reset()
-	resp.Integer(123).Marshal(b)
+	resp.NewInteger(123).Encode(b)
 	fmt.Println(strings.ReplaceAll(b.String(), "\r\n", `\r\n`))
 
 	b.Reset()
-	resp.Integer(-123).Marshal(b)
+	resp.NewInteger(-123).Encode(b)
 	fmt.Println(strings.ReplaceAll(b.String(), "\r\n", `\r\n`))
 
 	b.Reset()
-	resp.BulkString("hello").Marshal(b)
+	resp.NewBulkString([]byte("hello")).Encode(b)
 	fmt.Println(strings.ReplaceAll(b.String(), "\r\n", `\r\n`))
 
 	b.Reset()
-	resp.Array().Marshal(b)
+	resp.NewArray().Encode(b)
 	fmt.Println(strings.ReplaceAll(b.String(), "\r\n", `\r\n`))
 
 	b.Reset()
-	arr := resp.Array()
-	arr.Add(resp.BulkString("hello"))
-	arr.Add(resp.BulkString("world"))
-	arr.Marshal(b)
+	arr := resp.NewArray()
+	arr.Add(resp.NewBulkString([]byte("hello")))
+	arr.Add(resp.NewBulkString([]byte("world")))
+	arr.Encode(b)
 	fmt.Println(strings.ReplaceAll(b.String(), "\r\n", `\r\n`))
 
 	b.Reset()
-	arr = resp.Array()
-	arr.Add(resp.Integer(1))
-	arr.Add(resp.Integer(2))
-	arr.Add(resp.Integer(3))
-	arr.Add(resp.Integer(4))
-	arr.Add(resp.BulkString("hello"))
-	arr.Marshal(b)
+	arr = resp.NewArray()
+	arr.Add(resp.NewInteger(1))
+	arr.Add(resp.NewInteger(2))
+	arr.Add(resp.NewInteger(3))
+	arr.Add(resp.NewInteger(4))
+	arr.Add(resp.NewBulkString([]byte("hello")))
+	arr.Encode(b)
+	fmt.Println(strings.ReplaceAll(b.String(), "\r\n", `\r\n`))
+
+	dt, i, err := resp.Decode([]byte("$0\r\n"))
+	if err != nil {
+		fmt.Println(i, err)
+		return
+	}
+	b.Reset()
+	dt.Encode(b)
 	fmt.Println(strings.ReplaceAll(b.String(), "\r\n", `\r\n`))
 }
