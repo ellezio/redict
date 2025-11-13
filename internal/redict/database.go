@@ -101,7 +101,7 @@ func (db *Database) RPop(key string) ([]byte, error) {
 	}
 
 	if l, ok := s.(*list); ok {
-		b := l.popHead()
+		b := l.popTail()
 		return b, nil
 	} else {
 		return nil, errors.New("wrong operation against key")

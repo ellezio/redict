@@ -88,28 +88,30 @@ func (l *list) popTail() []byte {
 
 func (l *list) get(start, end int64) [][]byte {
 	if start < 0 {
-		start = int64(l.length) + start + 1
+		start = int64(l.length) + start
 	}
 
+	end = min(end, int64(l.length-1))
 	if end < 0 {
-		end = int64(l.length) + end + 1
+		end = int64(l.length) + end
 	}
 
-	if start >= end {
+	if start > end {
 		return nil
 	}
 
 	n := l.head
-	var i int64 = 0
-
-	for ; i < start; i++ {
+	for range start {
 		n = n.next
 	}
+	length := end - start + 1
+	b := make([][]byte, length)
+	for i := range length {
+		if n == nil {
+			break
+		}
 
-	b := make([][]byte, end-start)
-
-	for ; i < end; i++ {
-		b = append(b, n.v)
+		b[i] = n.v
 		n = n.next
 	}
 
@@ -122,19 +124,16 @@ func (l *list) trim(start, end int64) {
 	}
 
 	if start < 0 {
-		start = int64(l.length) + start + 1
+		start = int64(l.length) + start
 	}
 
 	if end < 0 {
-		end = int64(l.length) + end + 1
+		end = int64(l.length) + end
 	}
 
-	if start >= end {
-		return
-	}
+	defer func() { l.length = uint32(max(0, int64(l.length)-start-(int64(l.length-1)-end))) }()
 
-	var i int64 = 0
-	for ; i < start; i++ {
+	for range start {
 		l.head = l.head.next
 		if l.head == nil {
 			l.tail = nil
@@ -143,8 +142,7 @@ func (l *list) trim(start, end int64) {
 		l.head.prev = nil
 	}
 
-	i = int64(l.length) - 1
-	for ; i > end; i-- {
+	for range max(0, int64(l.length-1)-end) {
 		l.tail = l.tail.prev
 		if l.tail == nil {
 			l.head = nil
