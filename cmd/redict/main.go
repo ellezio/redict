@@ -2,102 +2,16 @@ package main
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"log"
 	"net"
-	"strconv"
-	"strings"
 
 	"github.com/ellezio/redict/internal/redict"
+	"github.com/ellezio/redict/internal/redict/command"
 	"github.com/ellezio/redict/internal/resp"
 )
 
 var db *redict.Database
-
-type Patterns map[string]string
-
-var patterns = Patterns{
-	"SET": "KEY VALUE",
-	"GET": "KEY",
-
-	"LPUSH":  "KEY VALUE",
-	"RPUSH":  "KEY VALUE",
-	"LPOP":   "KEY",
-	"RPOP":   "KEY",
-	"LRANGE": "KEY START END",
-	"LTRIM":  "KEY START END",
-	"LLEN":   "KEY",
-}
-
-func (p Patterns) match(args *resp.Array) (Cmd, error) {
-	cmd := Cmd{}
-
-	cmdName, ok := args.Values[0].(*resp.BulkString)
-	if !ok {
-		return Cmd{}, errors.New("invalid type of command name")
-	}
-
-	pattern, ok := p[string(cmdName.Value)]
-	if !ok {
-		return Cmd{}, errors.New("pattern not found")
-	}
-
-	parts := strings.Split(pattern, " ")
-	argsLen := len(args.Values)
-	idx := 1
-	for _, part := range parts {
-		if idx >= argsLen && p.isPartRequired(part) {
-			return Cmd{}, fmt.Errorf("cannot read %q - invalid arguments number", part)
-		}
-
-		bstr, ok := args.Values[idx].(*resp.BulkString)
-		if !ok {
-			return Cmd{}, fmt.Errorf("invalid type for %q", part)
-		}
-
-		var err error
-		switch part {
-		case "KEY":
-			cmd.Key = string(bstr.Value)
-		case "VALUE":
-			cmd.Value = bstr.Value
-		case "START":
-			cmd.Start, err = p.toInt64(bstr)
-		case "END":
-			cmd.End, err = p.toInt64(bstr)
-		default:
-			return Cmd{}, fmt.Errorf("unknown pattern part %q", part)
-		}
-
-		if err != nil {
-			return Cmd{}, err
-		}
-
-		idx++
-	}
-
-	return cmd, nil
-}
-
-func (p Patterns) isPartRequired(part string) bool {
-	return part[0] != '['
-}
-
-func (p Patterns) toInt64(v *resp.BulkString) (int64, error) {
-	i, err := strconv.ParseInt(string(v.Value), 10, 64)
-	if err != nil {
-		err = fmt.Errorf("cannot convert BulkString to int64: %s", err)
-	}
-	return i, err
-}
-
-type Cmd struct {
-	Key   string
-	Value []byte
-	Start int64
-	End   int64
-}
 
 func main() {
 	db = redict.NewDatabase()
@@ -108,6 +22,19 @@ func main() {
 		panic(err)
 	}
 	defer listener.Close()
+
+	handlers := map[command.CmdName]func(command.Cmd) (resp.DataType, error){
+		command.SET: cmdSet,
+		command.GET: cmdGet,
+
+		command.LPUSH:  cmdLPush,
+		command.RPUSH:  cmdRPush,
+		command.LPOP:   cmdLPop,
+		command.RPOP:   cmdRPop,
+		command.LRANGE: cmdLRange,
+		command.LTRIM:  cmdLTrim,
+		command.LLEN:   cmdLLen,
+	}
 
 	for {
 		conn, err := listener.Accept()
@@ -136,41 +63,19 @@ func main() {
 		if arr, ok := dt.(*resp.Array); !ok {
 			fmt.Println("invalid payload type")
 			continue
-		} else if cmd, ok := arr.Values[0].(*resp.BulkString); !ok {
-			fmt.Println("invalid payload type")
-			continue
 		} else {
 			fmt.Println("executing command")
 
 			var res resp.DataType = nil
-			cmdArgs, err := patterns.match(arr)
+			cmd, err := command.ParseCmd(arr)
 			if err != nil {
 				err = fmt.Errorf("cannot resolve command: %s", err)
 				log.Println(err)
+			} else if handler, ok := handlers[cmd.Name]; ok {
+				res, err = handler(cmd)
 			} else {
-				switch string(cmd.Value) {
-				case "SET":
-					err = cmdSet(cmdArgs)
-				case "GET":
-					res, err = cmdGet(cmdArgs)
-				case "LPUSH":
-					err = cmdLPush(cmdArgs)
-				case "RPUSH":
-					err = cmdRPush(cmdArgs)
-				case "LPOP":
-					res, err = cmdLPop(cmdArgs)
-				case "RPOP":
-					res, err = cmdRPop(cmdArgs)
-				case "LRANGE":
-					res, err = cmdLRange(cmdArgs)
-				case "LTRIM":
-					err = cmdLTrim(cmdArgs)
-				case "LLEN":
-					res, err = cmdLLen(cmdArgs)
-				default:
-					log.Println("unknown command")
-					return
-				}
+				log.Println("unknown command")
+				return
 			}
 
 			if err != nil {
@@ -191,16 +96,16 @@ func main() {
 	}
 }
 
-func cmdSet(cmd Cmd) error {
+func cmdSet(cmd command.Cmd) (resp.DataType, error) {
 	if err := db.Set(cmd.Key, cmd.Value); err != nil {
 		fmt.Printf("cannot set value for store: %s\n", err)
-		return fmt.Errorf("Err - cannot set value for store: %s\n", err)
+		return nil, fmt.Errorf("Err - cannot set value for store: %s\n", err)
 	}
 
-	return nil
+	return nil, nil
 }
 
-func cmdGet(cmd Cmd) (resp.DataType, error) {
+func cmdGet(cmd command.Cmd) (resp.DataType, error) {
 	data, err := db.Get(cmd.Key)
 	if err != nil {
 		fmt.Printf("cannot get data: %s", err)
@@ -210,25 +115,25 @@ func cmdGet(cmd Cmd) (resp.DataType, error) {
 	return resp.NewBulkString(string(data)), nil
 }
 
-func cmdLPush(cmd Cmd) error {
+func cmdLPush(cmd command.Cmd) (resp.DataType, error) {
 	if err := db.LPush(cmd.Key, cmd.Value); err != nil {
 		log.Printf("cannot push value to list head: %s", err)
-		return fmt.Errorf("Err - cannot push value to list head: %s", err)
+		return nil, fmt.Errorf("Err - cannot push value to list head: %s", err)
 	}
 
-	return nil
+	return nil, nil
 }
 
-func cmdRPush(cmd Cmd) error {
+func cmdRPush(cmd command.Cmd) (resp.DataType, error) {
 	if err := db.RPush(cmd.Key, cmd.Value); err != nil {
 		log.Printf("cannot push value to list tail: %s", err)
-		return fmt.Errorf("Err - cannot push value to list tail: %s", err)
+		return nil, fmt.Errorf("Err - cannot push value to list tail: %s", err)
 	}
 
-	return nil
+	return nil, nil
 }
 
-func cmdLPop(cmd Cmd) (resp.DataType, error) {
+func cmdLPop(cmd command.Cmd) (resp.DataType, error) {
 	data, err := db.LPop(cmd.Key)
 	if err != nil {
 		log.Printf("cannot pop list's head: %s", err)
@@ -238,7 +143,7 @@ func cmdLPop(cmd Cmd) (resp.DataType, error) {
 	return resp.NewBulkString(string(data)), nil
 }
 
-func cmdRPop(cmd Cmd) (resp.DataType, error) {
+func cmdRPop(cmd command.Cmd) (resp.DataType, error) {
 	data, err := db.RPop(cmd.Key)
 	if err != nil {
 		log.Printf("cannot pop list's tail: %s", err)
@@ -248,7 +153,7 @@ func cmdRPop(cmd Cmd) (resp.DataType, error) {
 	return resp.NewBulkString(string(data)), nil
 }
 
-func cmdLRange(cmd Cmd) (resp.DataType, error) {
+func cmdLRange(cmd command.Cmd) (resp.DataType, error) {
 	data, err := db.LRange(cmd.Key, cmd.Start, cmd.End)
 	if err != nil {
 		log.Printf("cannot get range of list: %s", err)
@@ -263,16 +168,16 @@ func cmdLRange(cmd Cmd) (resp.DataType, error) {
 	return arr, nil
 }
 
-func cmdLTrim(cmd Cmd) error {
+func cmdLTrim(cmd command.Cmd) (resp.DataType, error) {
 	if err := db.LTrim(cmd.Key, cmd.Start, cmd.End); err != nil {
 		log.Printf("cannot trim list: %s", err)
-		return fmt.Errorf("Err - cannot trim list: %s", err)
+		return nil, fmt.Errorf("Err - cannot trim list: %s", err)
 	}
 
-	return nil
+	return nil, nil
 }
 
-func cmdLLen(cmd Cmd) (resp.DataType, error) {
+func cmdLLen(cmd command.Cmd) (resp.DataType, error) {
 	data, err := db.LLen(cmd.Key)
 	if err != nil {
 		log.Printf("cannot trim list: %s", err)
